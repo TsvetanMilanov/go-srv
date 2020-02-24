@@ -3,13 +3,29 @@ package srv
 import (
 	"io"
 
+	"github.com/TsvetanMilanov/go-gin-prometheus-middleware/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // AppInitializer provides method for initializing
 // the web application.
 type AppInitializer interface {
-	Initialize(loggerOut io.Writer) AppDependenciesRegisterer
+	Initialize(loggerOut io.Writer) MetricsServerConfigurator
+}
+
+// MetricsServerConfigurator provides methods for configuring the metrics server.
+type MetricsServerConfigurator interface {
+	AppDependenciesRegisterer
+
+	// This step is not required.
+	EnableMetricsServer(options *middleware.Options) MetricsServerConfigurator
+	// This step is not required.
+	// If no registry is set the server will use the default prometheus registry.
+	SetMetricsRegistry(registry *prometheus.Registry) MetricsServerConfigurator
+	// This step is not required.
+	// Defaults to :80
+	SetMetricsServerAddr(addr string) MetricsServerConfigurator
 }
 
 // AppDependenciesRegisterer provides method for registering the app dependencies.

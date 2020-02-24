@@ -4,13 +4,21 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/TsvetanMilanov/go-gin-prometheus-middleware/middleware"
 	"github.com/TsvetanMilanov/go-simple-di/di"
 	"github.com/TsvetanMilanov/go-srv/srv/log"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type appBuilder struct {
-	router            *gin.Engine
+	router *gin.Engine
+
+	metricsRouter            *gin.Engine
+	metricsMiddlewareOptions *middleware.Options
+	metricsAddr              string
+	metricsRegistry          *prometheus.Registry
+
 	appDI             *di.Container
 	reqDI             *di.Container
 	reqDIConfigurator RequestDIConfiguratorFunc
@@ -18,7 +26,7 @@ type appBuilder struct {
 	err               error
 }
 
-func (ab *appBuilder) Initialize(loggerOut io.Writer) AppDependenciesRegisterer {
+func (ab *appBuilder) Initialize(loggerOut io.Writer) MetricsServerConfigurator {
 	ab.appDI = di.NewContainer()
 	ab.reqDI = di.NewContainer()
 	ab.appLogger = log.NewLogger(loggerOut)
@@ -26,10 +34,34 @@ func (ab *appBuilder) Initialize(loggerOut io.Writer) AppDependenciesRegisterer 
 	return ab
 }
 
+func (ab *appBuilder) EnableMetricsServer(options *middleware.Options) MetricsServerConfigurator {
+	ab.metricsRouter = gin.New()
+	ab.metricsMiddlewareOptions = options
+
+	return ab
+}
+
+func (ab *appBuilder) SetMetricsRegistry(registry *prometheus.Registry) MetricsServerConfigurator {
+	ab.metricsRegistry = registry
+
+	return ab
+}
+
+func (ab *appBuilder) SetMetricsServerAddr(addr string) MetricsServerConfigurator {
+	ab.metricsAddr = addr
+
+	return ab
+}
+
 func (ab *appBuilder) RegisterAppDependencies(registerer DIContainerUser) AppDependenciesResolver {
-	err := ab.appDI.Register(&di.Dependency{Name: AppLoggerName, Value: ab.appLogger})
+	err := ab.appDI.Register(
+		&di.Dependency{Name: AppLoggerName, Value: ab.appLogger},
+		&di.Dependency{Name: AppDIName, Value: ab.appDI},
+		&di.Dependency{Name: ReqDIName, Value: ab.reqDI},
+	)
+
 	if err != nil {
-		return ab.setErr("RegisterAppDependencies", "unable to register the app logger", err)
+		return ab.setErr("RegisterAppDependencies", "unable to register the default app dependencies", err)
 	}
 
 	err = registerer(ab.appDI)
@@ -97,8 +129,18 @@ func (ab *appBuilder) AddDefaultMiddlewares() RouterConfigurator {
 
 	ab.router.Use(recoverMiddlewareFactory(ab.appLogger))
 	ab.router.Use(contextPropertiesMiddlewareFactory(ab))
+
 	if ab.reqDIConfigurator != nil {
 		ab.router.Use(requestDIConfiguratorMiddlewareFactory(ab))
+	}
+
+	if ab.metricsRouter != nil {
+		opts := ab.metricsMiddlewareOptions
+		if opts == nil {
+			opts = new(middleware.Options)
+		}
+
+		ab.router.Use(middleware.NewWithOptions(opts))
 	}
 
 	return ab

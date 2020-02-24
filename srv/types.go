@@ -10,8 +10,9 @@ import (
 
 // App provides methods for working with the web app.
 type App interface {
-	Start() error
+	Start(addr string) error
 	GetRouter() http.Handler
+	GetMetricsRouter() http.Handler
 	GetLogger() log.Logger
 }
 

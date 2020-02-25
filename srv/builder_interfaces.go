@@ -19,13 +19,7 @@ type MetricsServerConfigurator interface {
 	AppDependenciesRegisterer
 
 	// This step is not required.
-	EnableMetricsServer(options *middleware.Options) MetricsServerConfigurator
-	// This step is not required.
-	// If no registry is set the server will use the default prometheus registry.
-	SetMetricsRegistry(registry *prometheus.Registry) MetricsServerConfigurator
-	// This step is not required.
-	// Defaults to :80
-	SetMetricsServerAddr(addr string) MetricsServerConfigurator
+	EnableMetricsServer(gatherer prometheus.Gatherer, options *middleware.Options) MetricsServerConfigurator
 }
 
 // AppDependenciesRegisterer provides method for registering the app dependencies.

@@ -3,24 +3,24 @@ package srv
 import (
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/TsvetanMilanov/go-gin-prometheus-middleware/middleware"
 	"github.com/TsvetanMilanov/go-simple-di/di"
 	"github.com/TsvetanMilanov/go-srv/srv/log"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type appBuilder struct {
 	router *gin.Engine
 
-	metricsRouter            *gin.Engine
+	metricsRouter            http.Handler
 	metricsMiddlewareOptions *middleware.Options
-	metricsAddr              string
-	metricsRegistry          *prometheus.Registry
+	metricsGatherer          prometheus.Gatherer
 
 	appDI             *di.Container
-	reqDI             *di.Container
 	reqDIConfigurator RequestDIConfiguratorFunc
 	appLogger         log.Logger
 	err               error
@@ -28,27 +28,28 @@ type appBuilder struct {
 
 func (ab *appBuilder) Initialize(loggerOut io.Writer) MetricsServerConfigurator {
 	ab.appDI = di.NewContainer()
-	ab.reqDI = di.NewContainer()
 	ab.appLogger = log.NewLogger(loggerOut)
 
 	return ab
 }
 
-func (ab *appBuilder) EnableMetricsServer(options *middleware.Options) MetricsServerConfigurator {
-	ab.metricsRouter = gin.New()
+func (ab *appBuilder) EnableMetricsServer(gatherer prometheus.Gatherer, options *middleware.Options) MetricsServerConfigurator {
+	ab.metricsGatherer = gatherer
+	if ab.metricsGatherer == nil {
+		ab.metricsGatherer = prometheus.DefaultGatherer
+	}
+
 	ab.metricsMiddlewareOptions = options
+	if ab.metricsMiddlewareOptions == nil {
+		ab.metricsMiddlewareOptions = new(middleware.Options)
+	}
 
-	return ab
-}
+	if gatherer != nil && gatherer != prometheus.DefaultGatherer && ab.metricsMiddlewareOptions == nil {
+		return ab.setErr("EnableMetricsServer", "no custom registerer set in the middleware options but custom gatherer was provided", nil)
+	}
 
-func (ab *appBuilder) SetMetricsRegistry(registry *prometheus.Registry) MetricsServerConfigurator {
-	ab.metricsRegistry = registry
-
-	return ab
-}
-
-func (ab *appBuilder) SetMetricsServerAddr(addr string) MetricsServerConfigurator {
-	ab.metricsAddr = addr
+	ab.metricsRouter = promhttp.HandlerFor(ab.metricsGatherer, promhttp.HandlerOpts{})
+	ab.metricsMiddlewareOptions = options
 
 	return ab
 }
@@ -57,7 +58,6 @@ func (ab *appBuilder) RegisterAppDependencies(registerer DIContainerUser) AppDep
 	err := ab.appDI.Register(
 		&di.Dependency{Name: AppLoggerName, Value: ab.appLogger},
 		&di.Dependency{Name: AppDIName, Value: ab.appDI},
-		&di.Dependency{Name: ReqDIName, Value: ab.reqDI},
 	)
 
 	if err != nil {
@@ -140,6 +140,7 @@ func (ab *appBuilder) AddDefaultMiddlewares() RouterConfigurator {
 			opts = new(middleware.Options)
 		}
 
+		ab.router.Use(responseLoggerMiddlewareFactory(ab))
 		ab.router.Use(middleware.NewWithOptions(opts))
 	}
 
@@ -151,7 +152,7 @@ func (ab *appBuilder) ConfigureRouter(configurator RouterConfiguratorFunc) AppBu
 		return ab
 	}
 
-	err := configurator(ab.router, ab.appDI, ab.reqDI)
+	err := configurator(ab.router, ab.appDI)
 	if err != nil {
 		ab.setErr("ConfigureRouter", "unable to configure the router", err)
 	}

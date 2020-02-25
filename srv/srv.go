@@ -7,53 +7,53 @@ import (
 
 	"github.com/TsvetanMilanov/go-graceful-server-shutdown/gss"
 	"github.com/TsvetanMilanov/go-srv/srv/log"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type app struct {
-	appLogger       log.Logger
-	router          http.Handler
-	metricsRouter   http.Handler
-	metricsRegistry *prometheus.Registry
-	metricsAddr     string
+	appLogger     log.Logger
+	router        http.Handler
+	metricsRouter http.Handler
 }
 
-func (a *app) Start(addr string) error {
+func (a *app) Start(srvSettings, metricsSrvSettings *gss.Settings) error {
+	a.setSrvSettings(srvSettings, make(chan bool))
+	a.setSrvSettings(metricsSrvSettings, make(chan bool))
+
+	if len(srvSettings.Addr) == 0 {
+		return fmt.Errorf("srv: Start: srvSettings.Addr should be a valid address")
+	}
+
 	if a.metricsRouter != nil {
-		err := a.setMetricsServerAddr()
+		err := a.setMetricsServerAddr(metricsSrvSettings)
 		if err != nil {
 			return err
 		}
 
 		srvChan := make(chan error)
-		srvStopChan := make(chan bool)
 		metricsSrvChan := make(chan error)
-		metricsSrvStopChan := make(chan bool)
 
 		go func() {
-			settings := &gss.Settings{Addr: a.metricsAddr, ShutdownChannel: metricsSrvStopChan}
-			err := gss.StartServerWithSettings(a.metricsRouter, settings)
+			err := gss.StartServerWithSettings(a.metricsRouter, metricsSrvSettings)
 
 			metricsSrvChan <- err
 		}()
 
 		go func() {
-			settings := &gss.Settings{Addr: addr, ShutdownChannel: srvStopChan}
-			err := gss.StartServerWithSettings(a.router, settings)
+			err := gss.StartServerWithSettings(a.router, srvSettings)
 
 			srvChan <- err
 		}()
 
 		select {
 		case err := <-metricsSrvChan:
-			srvStopChan <- true
+			srvSettings.ShutdownChannel <- true
 			return err
 		case err := <-srvChan:
-			metricsSrvStopChan <- true
+			metricsSrvSettings.ShutdownChannel <- true
 			return err
 		}
 	} else {
-		err := gss.StartServer(http.DefaultServeMux)
+		err := gss.StartServerWithSettings(a.router, srvSettings)
 
 		return err
 	}
@@ -71,8 +71,12 @@ func (a *app) GetLogger() log.Logger {
 	return a.appLogger
 }
 
-func (a *app) setMetricsServerAddr() error {
-	addr, err := net.ResolveTCPAddr("tcp", a.metricsAddr)
+func (a *app) setMetricsServerAddr(metricsSrvSettings *gss.Settings) error {
+	if len(metricsSrvSettings.Addr) == 0 {
+		metricsSrvSettings.Addr = defaultMetricsServerAddr
+	}
+
+	addr, err := net.ResolveTCPAddr("tcp", metricsSrvSettings.Addr)
 	if err != nil {
 		return err
 	}
@@ -90,7 +94,7 @@ func (a *app) setMetricsServerAddr() error {
 			return err
 		}
 
-		a.metricsAddr = fmt.Sprintf(":%d", l.Addr().(*net.TCPAddr).Port)
+		metricsSrvSettings.Addr = fmt.Sprintf(":%d", l.Addr().(*net.TCPAddr).Port)
 	}
 
 	l.Close()
@@ -98,17 +102,21 @@ func (a *app) setMetricsServerAddr() error {
 	return nil
 }
 
+func (a *app) setSrvSettings(settings *gss.Settings, shutdownChannel chan bool) {
+	if settings == nil {
+		settings = new(gss.Settings)
+	}
+
+	if settings.ShutdownChannel == nil {
+		settings.ShutdownChannel = shutdownChannel
+	}
+}
+
 func newApp(ab *appBuilder) App {
 	a := new(app)
 	a.appLogger = ab.appLogger
 	a.router = ab.router
 	a.metricsRouter = ab.metricsRouter
-	a.metricsRegistry = ab.metricsRegistry
-	if len(ab.metricsAddr) == 0 {
-		a.metricsAddr = ":80"
-	} else {
-		a.metricsAddr = ab.metricsAddr
-	}
 
 	return a
 }

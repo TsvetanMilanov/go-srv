@@ -8,8 +8,17 @@ const (
 	ReqLoggerName = "reqLogger"
 
 	// AppDIName is the name of the app di container.
-	AppDIName = "appDI"
+	AppDIName = "appDi"
 
 	// ReqDIName is the name of the req di container.
-	ReqDIName = "reqDI"
+	ReqDIName = "reqDi"
+
+	// TraceIDName is the name of the trace id property.
+	TraceIDName = "traceId"
+
+	// TraceIDReqHeaderName is the name of the header which will be used
+	// to acquire trace id.
+	TraceIDReqHeaderName = "X-Trace-Id"
+
+	defaultMetricsServerAddr = ":80"
 )

@@ -1,6 +1,7 @@
 package srv
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 
@@ -32,18 +33,22 @@ func (ts *testDataService) GetData() map[string]interface{} {
 	return data
 }
 
-type testController struct {
-	ReqDI *di.Container `di:"name=reqDI"`
-}
+type testController struct{}
 
 func (tc *testController) Get(c *gin.Context) {
 	dataSvc := new(testDataService)
-	err := tc.ReqDI.Resolve(dataSvc)
+	reqDI, _ := c.Get("reqDi")
+
+	err := reqDI.(*di.Container).Resolve(dataSvc)
 	if err != nil {
 		panic(err)
 	}
 
 	c.JSON(http.StatusOK, dataSvc.GetData())
+}
+
+func (tc *testController) Panic(c *gin.Context) {
+	panic(errors.New("controller panic"))
 }
 
 func registerAppDependencies(container *di.Container) error {
@@ -63,7 +68,7 @@ func registerReqDependencies(req *http.Request, container *di.Container) error {
 	return err
 }
 
-func configureRouter(router *gin.Engine, appDI, reqDI *di.Container) error {
+func configureRouter(router *gin.Engine, appDI *di.Container) error {
 	tc := new(testController)
 	err := appDI.Resolve(tc)
 	if err != nil {
@@ -71,6 +76,7 @@ func configureRouter(router *gin.Engine, appDI, reqDI *di.Container) error {
 	}
 
 	router.GET("/data", tc.Get)
+	router.GET("/panic", tc.Panic)
 
 	return nil
 }

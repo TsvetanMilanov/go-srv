@@ -3,6 +3,7 @@ package srv
 import (
 	"net/http"
 
+	"github.com/TsvetanMilanov/go-graceful-server-shutdown/gss"
 	"github.com/TsvetanMilanov/go-simple-di/di"
 	"github.com/TsvetanMilanov/go-srv/srv/log"
 	"github.com/gin-gonic/gin"
@@ -10,10 +11,15 @@ import (
 
 // App provides methods for working with the web app.
 type App interface {
-	Start(addr string) error
+	Start(srvSettings, metricsSrvSettings *gss.Settings) error
 	GetRouter() http.Handler
 	GetMetricsRouter() http.Handler
 	GetLogger() log.Logger
+}
+
+// TraceIDProvider provides methods for acquiring trace id.
+type TraceIDProvider interface {
+	GetTraceID() string
 }
 
 // DIContainerUser is a function which receives a di container and
@@ -24,4 +30,4 @@ type DIContainerUser = func(container *di.Container) error
 type RequestDIConfiguratorFunc = func(req *http.Request, reqDI *di.Container) error
 
 // RouterConfiguratorFunc function which can be used to configure the router.
-type RouterConfiguratorFunc = func(router *gin.Engine, appDI, reqDI *di.Container) error
+type RouterConfiguratorFunc = func(router *gin.Engine, appDI *di.Container) error

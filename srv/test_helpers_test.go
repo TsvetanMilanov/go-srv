@@ -13,6 +13,7 @@ import (
 
 	"github.com/TsvetanMilanov/go-gin-prometheus-middleware/middleware"
 	"github.com/TsvetanMilanov/go-simple-di/di"
+	"github.com/TsvetanMilanov/go-srv/srv/log"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +52,9 @@ func (tcl *testDBClient) GetData() map[string]interface{} {
 }
 
 type testDataService struct {
-	DBClient *testDBClient `di:""`
+	DBClient        *testDBClient   `di:""`
+	RequestLogger   log.Logger      `di:"name=reqLogger"`
+	TraceIDProvider TraceIDProvider `di:""`
 }
 
 func (ts *testDataService) GetData() map[string]interface{} {

@@ -1,12 +1,18 @@
 package srv
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"testing"
 
+	"github.com/TsvetanMilanov/go-gin-prometheus-middleware/middleware"
 	"github.com/TsvetanMilanov/go-simple-di/di"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -91,4 +97,53 @@ func performRequest(r http.Handler, method, path string) *httptest.ResponseRecor
 	r.ServeHTTP(w, req)
 
 	return w
+}
+
+func createApp(promMiddlewareOpts *middleware.Options) (App, *bytes.Buffer, *prometheus.Registry, error) {
+	registry := prometheus.NewRegistry()
+
+	if promMiddlewareOpts == nil {
+		promMiddlewareOpts = &middleware.Options{Registry: registry}
+	}
+
+	b := new(bytes.Buffer)
+	msc := NewAppBuilder().
+		Initialize(b).
+		EnableMetricsServer(registry, promMiddlewareOpts)
+
+	app, err := configureMetricsServerConfigurator(msc)
+
+	return app, b, registry, err
+}
+
+func configureMetricsServerConfigurator(msc MetricsServerConfigurator) (App, error) {
+	app, err := msc.
+		RegisterAppDependencies(registerAppDependencies).
+		ResolveAppDependencies().
+		RegisterReqDIConfigurator(registerReqDependencies).
+		ConfigureApp(func(appDI *di.Container) error { return nil }).
+		RegisterRouter(gin.New()).
+		AddDefaultMiddlewares().
+		ConfigureRouter(configureRouter).
+		BuildApp()
+
+	return app, err
+}
+
+func assertLogMessage(t *testing.T, b *bytes.Buffer, expected map[string]interface{}, expectedToContain []string) {
+	t.Helper()
+
+	logEntry := make(map[string]interface{})
+	err := json.Unmarshal(b.Bytes(), &logEntry)
+	assert.NoError(t, err)
+
+	for k, v := range expected {
+		assert.Equal(t, v, logEntry[k])
+	}
+
+	for _, k := range expectedToContain {
+		_, ok := logEntry[k]
+
+		assert.True(t, ok)
+	}
 }

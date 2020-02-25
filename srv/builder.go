@@ -44,7 +44,10 @@ func (ab *appBuilder) EnableMetricsServer(gatherer prometheus.Gatherer, options 
 		ab.metricsMiddlewareOptions = new(middleware.Options)
 	}
 
-	if gatherer != nil && gatherer != prometheus.DefaultGatherer && ab.metricsMiddlewareOptions == nil {
+	hasCustomGathererButNotCustomRegisterer :=
+		gatherer != nil && gatherer != prometheus.DefaultGatherer && ab.metricsMiddlewareOptions.Registry == nil
+
+	if hasCustomGathererButNotCustomRegisterer {
 		return ab.setErr("EnableMetricsServer", "no custom registerer set in the middleware options but custom gatherer was provided", nil)
 	}
 
@@ -102,7 +105,7 @@ func (ab *appBuilder) ConfigureApp(configurator DIContainerUser) RouterRegistere
 
 	err := configurator(ab.appDI)
 	if err != nil {
-		ab.setErr("ResolveAppDependencies", "unable to configure the application", err)
+		ab.setErr("ConfigureApp", "unable to configure the application", err)
 	}
 
 	return ab

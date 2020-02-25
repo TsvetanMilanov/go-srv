@@ -1,6 +1,7 @@
 package srv
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,17 +17,26 @@ type app struct {
 }
 
 func (a *app) Start(srvSettings, metricsSrvSettings *gss.Settings) error {
+	if srvSettings == nil {
+		return errors.New("srv: Start: srvSettings should not be nil")
+	}
+
 	a.setSrvSettings(srvSettings, make(chan bool))
+
+	if metricsSrvSettings == nil {
+		metricsSrvSettings = new(gss.Settings)
+	}
+
 	a.setSrvSettings(metricsSrvSettings, make(chan bool))
 
 	if len(srvSettings.Addr) == 0 {
-		return fmt.Errorf("srv: Start: srvSettings.Addr should be a valid address")
+		return errors.New("srv: Start: srvSettings.Addr should be a valid address")
 	}
 
 	if a.metricsRouter != nil {
 		err := a.setMetricsServerAddr(metricsSrvSettings)
 		if err != nil {
-			return err
+			return fmt.Errorf("srv: Start: unable to set the metrics server addr %s", err)
 		}
 
 		srvChan := make(chan error)
@@ -103,10 +113,6 @@ func (a *app) setMetricsServerAddr(metricsSrvSettings *gss.Settings) error {
 }
 
 func (a *app) setSrvSettings(settings *gss.Settings, shutdownChannel chan bool) {
-	if settings == nil {
-		settings = new(gss.Settings)
-	}
-
 	if settings.ShutdownChannel == nil {
 		settings.ShutdownChannel = shutdownChannel
 	}

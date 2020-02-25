@@ -130,22 +130,18 @@ func (ab *appBuilder) AddDefaultMiddlewares() RouterConfigurator {
 		return ab
 	}
 
-	ab.router.Use(recoverMiddlewareFactory(ab.appLogger))
+	// Middlewares which are executed before the request handler.
 	ab.router.Use(contextPropertiesMiddlewareFactory(ab))
+	ab.addRequestDIConfiguratorMiddlewareIfRequired()
 
-	if ab.reqDIConfigurator != nil {
-		ab.router.Use(requestDIConfiguratorMiddlewareFactory(ab))
-	}
-
-	if ab.metricsRouter != nil {
-		opts := ab.metricsMiddlewareOptions
-		if opts == nil {
-			opts = new(middleware.Options)
-		}
-
-		ab.router.Use(responseLoggerMiddlewareFactory(ab))
-		ab.router.Use(middleware.NewWithOptions(opts))
-	}
+	// Middlewares which wrap the request handler.
+	// Register the metrics middleware before the recover middleware in order to
+	// track failed requests.
+	ab.addMetricsMiddlewareIfRequired()
+	// Register the response logger before the recover middleware in order to log
+	// failed requests.
+	ab.router.Use(responseLoggerMiddlewareFactory(ab))
+	ab.router.Use(recoverMiddlewareFactory(ab.appLogger))
 
 	return ab
 }
@@ -181,6 +177,23 @@ func (ab *appBuilder) setErr(method, msg string, err error) *appBuilder {
 	}
 
 	return ab
+}
+
+func (ab *appBuilder) addMetricsMiddlewareIfRequired() {
+	if ab.metricsRouter != nil {
+		opts := ab.metricsMiddlewareOptions
+		if opts == nil {
+			opts = new(middleware.Options)
+		}
+
+		ab.router.Use(middleware.NewWithOptions(opts))
+	}
+}
+
+func (ab *appBuilder) addRequestDIConfiguratorMiddlewareIfRequired() {
+	if ab.reqDIConfigurator != nil {
+		ab.router.Use(requestDIConfiguratorMiddlewareFactory(ab))
+	}
 }
 
 // NewAppBuilder creates new web application builder.

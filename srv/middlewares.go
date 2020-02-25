@@ -3,6 +3,8 @@ package srv
 import (
 	"fmt"
 	"net/http"
+	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/TsvetanMilanov/go-simple-di/di"
@@ -11,26 +13,15 @@ import (
 )
 
 func recoverMiddlewareFactory(appLogger log.Logger) gin.HandlerFunc {
-	start := time.Now()
 	return func(c *gin.Context) {
 		defer func() {
 			err := recover()
 			if err != nil {
-				logger := appLogger
-				reqDI, err := GetReqDI(c)
-				if err == nil {
-					reqLogger := new(log.Logger)
-					err = reqDI.ResolveByName(ReqLoggerName, reqLogger)
-					if err == nil {
-						logger = *reqLogger
-					}
-				}
+				logger := GetRequestLoggerOrDefaultChild(c, appLogger)
 
-				logger.Error(fmt.Sprintf("srv: recoverMiddleware: recovered %s", err))
+				logger.Error(fmt.Sprintf("srv: recoverMiddleware: recovered %#v %s", err, strings.ReplaceAll(string(debug.Stack()), "\n", "\\n")))
 
 				c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
-
-				logger.Info(createLogEntryFields(start, c))
 			}
 		}()
 
@@ -74,23 +65,14 @@ func requestDIConfiguratorMiddlewareFactory(ab *appBuilder) gin.HandlerFunc {
 
 func responseLoggerMiddlewareFactory(ab *appBuilder) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		reqDI, err := GetReqDI(c)
-		if err != nil {
-			panic(fmt.Errorf("srv: responseLoggerMiddleware: unable to get the req di %s", err))
-		}
-
-		reqLogger := new(log.Logger)
-		err = reqDI.ResolveByName(ReqLoggerName, reqLogger)
-		if err != nil {
-			panic(fmt.Errorf("srv: responseLoggerMiddleware: unable to resolve the request logger %s", err))
-		}
-
 		start := time.Now()
 		c.Next()
 
-		(*reqLogger).AddFields(createLogEntryFields(start, c))
+		logger := GetRequestLoggerOrDefaultChild(c, ab.appLogger)
 
-		(*reqLogger).Info("request complete")
+		logger.AddFields(createLogEntryFields(start, c))
+
+		logger.Info("request complete")
 	}
 }
 

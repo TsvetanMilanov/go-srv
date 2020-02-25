@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/TsvetanMilanov/go-simple-di/di"
+	"github.com/TsvetanMilanov/go-srv/srv/log"
 )
 
 // GetReqDI tries to get the request di from the context.
@@ -21,4 +22,23 @@ func GetReqDI(c context.Context) (*di.Container, error) {
 	}
 
 	return reqDI, nil
+}
+
+// GetRequestLoggerOrDefaultChild returns the request logger or the child of the default logger.
+func GetRequestLoggerOrDefaultChild(c context.Context, defaultLogger log.Logger) log.Logger {
+	var logger log.Logger
+	reqDI, err := GetReqDI(c)
+	if err == nil {
+		reqLogger := new(log.Logger)
+		err = reqDI.ResolveByName(ReqLoggerName, reqLogger)
+		if err == nil {
+			logger = *reqLogger
+		}
+	}
+
+	if logger == nil {
+		logger = defaultLogger.CreateChild()
+	}
+
+	return logger
 }

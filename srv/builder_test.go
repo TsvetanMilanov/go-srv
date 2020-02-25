@@ -23,9 +23,10 @@ func TestBuilderAllSteps(t *testing.T) {
 
 	res := performRequest(app.GetRouter(), http.MethodGet, "/data")
 
+	assert.Equal(t, http.StatusOK, res.Code)
 	expected, _ := json.Marshal(dbData)
 	assert.Equal(t, strings.TrimSpace(string(expected)), strings.TrimSpace(string(res.Body.Bytes())))
-	assertLogMessage(t, b, map[string]interface{}{"level": "info", "msg": "request complete"}, []string{"time", "traceId"})
+	assertLogMessage(t, b, []map[string]interface{}{{"level": "info", "msg": "request complete"}}, [][]string{{"time", "traceId"}})
 
 	metricsRes := performRequest(app.GetMetricsRouter(), http.MethodGet, "/metrics")
 	assert.Contains(t, string(metricsRes.Body.Bytes()), "http_request_duration_seconds_count{method=\"GET\",path=\"/data\",status_code=\"200\"} 1")

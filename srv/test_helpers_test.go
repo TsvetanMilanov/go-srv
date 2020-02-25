@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/TsvetanMilanov/go-gin-prometheus-middleware/middleware"
@@ -22,6 +25,24 @@ const (
 var (
 	dbData = map[string]interface{}{"key": "value"}
 )
+
+func getFreeAddr() string {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		panic(err)
+	}
+
+	defer l.Close()
+
+	port := l.Addr().(*net.TCPAddr).Port
+
+	return fmt.Sprintf(":%d", port)
+}
 
 type testDBClient struct{}
 
@@ -130,20 +151,24 @@ func configureMetricsServerConfigurator(msc MetricsServerConfigurator) (App, err
 	return app, err
 }
 
-func assertLogMessage(t *testing.T, b *bytes.Buffer, expected map[string]interface{}, expectedToContain []string) {
+func assertLogMessage(t *testing.T, b *bytes.Buffer, expected []map[string]interface{}, expectedToContain [][]string) {
 	t.Helper()
 
-	logEntry := make(map[string]interface{})
-	err := json.Unmarshal(b.Bytes(), &logEntry)
-	assert.NoError(t, err)
+	allLines := strings.Split(strings.TrimSpace(string(b.Bytes())), "\n")
+	for i, line := range allLines {
+		logEntry := make(map[string]interface{})
 
-	for k, v := range expected {
-		assert.Equal(t, v, logEntry[k])
-	}
+		err := json.Unmarshal([]byte(line), &logEntry)
+		assert.NoError(t, err)
 
-	for _, k := range expectedToContain {
-		_, ok := logEntry[k]
+		for k, v := range expected[i] {
+			assert.Equal(t, v, logEntry[k])
+		}
 
-		assert.True(t, ok)
+		for _, k := range expectedToContain[i] {
+			_, ok := logEntry[k]
+
+			assert.True(t, ok)
+		}
 	}
 }

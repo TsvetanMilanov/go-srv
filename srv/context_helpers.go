@@ -9,11 +9,6 @@ import (
 
 // GetReqDI tries to get the request di from the context.
 func GetReqDI(c context.Context) (*di.Container, error) {
-	// reqDIInstance, ok := c.Get(ReqDIName)
-	// if !ok {
-	// 	return nil, errors.New("srv: GetReqDI: unable to get the request di from the context")
-	// }
-
 	reqDIInstance := c.Value(ReqDIName)
 
 	if reqDIInstance == nil {

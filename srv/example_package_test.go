@@ -105,4 +105,7 @@ func Example() {
 	}
 
 	err = app.Start(&gss.Settings{Addr: ":80"}, nil)
+	if err != nil {
+		panic(err)
+	}
 }
